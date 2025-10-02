@@ -1,5 +1,5 @@
 import { useState, type FC, type ComponentType, type SVGProps } from 'react';
-import { Trophy, Brain, Globe, BookOpen, Lightbulb, AlertCircle } from 'lucide-react';
+import { Trophy, Brain, Globe, BookOpen, Lightbulb, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Circle as XCircle, ArrowRight } from 'lucide-react';
 
 interface Topic {
   id: string;
@@ -16,6 +16,7 @@ interface Question {
 
 const App: FC = () => {
   const [level, setLevel] = useState<number>(1);
+  const [highestLevel, setHighestLevel] = useState<number>(1);
   const [apiKey, setApiKey] = useState<string>('');
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
@@ -26,6 +27,8 @@ const App: FC = () => {
   const [message, setMessage] = useState<string>('');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModelResource, setSelectedModelResource] = useState<string>('models/gemini-1.5-flash');
+  const [showResult, setShowResult] = useState<boolean>(false);
+  const [isCorrect, setIsCorrect] = useState<boolean>(false);
 
   const topics: Topic[] = [
     { id: 'matematica', name: 'Matematica', icon: Brain, color: 'bg-blue-500' },
@@ -173,39 +176,56 @@ Non aggiungere testo prima o dopo il JSON.`;
     }
   };
 
+  const getCheckpoint = (lvl: number): number => {
+    if (lvl >= 18) return 18;
+    if (lvl >= 14) return 14;
+    if (lvl >= 7) return 7;
+    return 1;
+  };
+
   const handleAnswer = (index: number) => {
     if (answered) return;
-    
+
     setAnswered(true);
-    
-    if (question && index === question.corretta) {
-      setMessage('✅ Risposta corretta!');
+    const correct = question ? index === question.corretta : false;
+    setIsCorrect(correct);
+    setShowResult(true);
+
+    if (correct) {
+      setMessage('Risposta corretta!');
       setScore(score + 1);
-      
+
       if (level === 20) {
-        setMessage('🎉 HAI VINTO! Hai completato tutti i 20 livelli!');
-      } else {
+        setMessage('HAI VINTO! Hai completato tutti i 20 livelli!');
         setTimeout(() => {
-          setLevel(level + 1);
-          setQuestion(null);
-          setSelectedTopic(null);
-          setAnswered(false);
-          setMessage('');
-        }, 2000);
+          setShowResult(false);
+          setLevel(21);
+        }, 3000);
+      } else {
+        const newLevel = level + 1;
+        if (newLevel > highestLevel) {
+          setHighestLevel(newLevel);
+        }
       }
     } else {
-      setMessage('❌ Risposta sbagliata! Torni al livello precedente.');
-      
-      setTimeout(() => {
-        if (level > 1) {
-          setLevel(level - 1);
-        }
-        setQuestion(null);
-        setSelectedTopic(null);
-        setAnswered(false);
-        setMessage('');
-      }, 2500);
+      setMessage('Risposta sbagliata!');
     }
+  };
+
+  const handleNextQuestion = () => {
+    if (isCorrect) {
+      setLevel(level + 1);
+    } else {
+      const checkpoint = getCheckpoint(level);
+      const newLevel = Math.max(checkpoint, level - 1);
+      setLevel(newLevel);
+    }
+
+    setQuestion(null);
+    setSelectedTopic(null);
+    setAnswered(false);
+    setMessage('');
+    setShowResult(false);
   };
 
   if (!gameStarted) {
@@ -296,7 +316,7 @@ Non aggiungere testo prima o dopo il JSON.`;
       <div className="max-w-4xl mx-auto py-8">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-800">Livello {level}/20</h2>
               <p className="text-gray-600">Difficoltà: {getDifficulty(level)}</p>
@@ -306,10 +326,83 @@ Non aggiungere testo prima o dopo il JSON.`;
               <p className="text-3xl font-bold text-purple-600">{score}</p>
             </div>
           </div>
+
+          {/* Mappa Livelli */}
+          <div className="mt-6">
+            <div className="grid grid-cols-10 gap-2">
+              {Array.from({ length: 20 }, (_, i) => i + 1).map((lvl) => {
+                const isCheckpoint = lvl === 7 || lvl === 14 || lvl === 18;
+                const isCurrent = lvl === level;
+                const isPassed = lvl < level || (lvl <= highestLevel && lvl < level);
+                const isUnreached = lvl > highestLevel;
+
+                return (
+                  <div
+                    key={lvl}
+                    className={`relative aspect-square rounded-lg flex items-center justify-center text-sm font-bold transition-all duration-300 ${
+                      isCurrent
+                        ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white scale-110 shadow-lg ring-4 ring-blue-300'
+                        : isPassed
+                        ? 'bg-gradient-to-br from-green-400 to-green-500 text-white'
+                        : isUnreached
+                        ? 'bg-gray-200 text-gray-400'
+                        : 'bg-gray-300 text-gray-600'
+                    }`}
+                  >
+                    {isCheckpoint && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border-2 border-white shadow-md"></div>
+                    )}
+                    {lvl}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-center gap-4 mt-4 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-yellow-400"></div>
+                <span>Checkpoint (7, 14, 18)</span>
+              </div>
+            </div>
+          </div>
         </div>
 
+        {/* Animazione Risultato */}
+        {showResult && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in">
+            <div className={`bg-white rounded-2xl shadow-2xl p-12 max-w-md w-full mx-4 text-center transform transition-all duration-500 ${
+              isCorrect ? 'animate-bounce-in' : 'animate-shake'
+            }`}>
+              {isCorrect ? (
+                <>
+                  <CheckCircle className="w-24 h-24 mx-auto mb-6 text-green-500 animate-scale-in" />
+                  <h2 className="text-4xl font-bold text-gray-800 mb-4">Corretto!</h2>
+                  <p className="text-xl text-gray-600 mb-8">{message}</p>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-24 h-24 mx-auto mb-6 text-red-500 animate-scale-in" />
+                  <h2 className="text-4xl font-bold text-gray-800 mb-4">Sbagliato!</h2>
+                  <p className="text-xl text-gray-600 mb-4">{message}</p>
+                  <p className="text-lg text-gray-500 mb-8">
+                    {getCheckpoint(level) < level
+                      ? `Tornerai al checkpoint ${getCheckpoint(level)}`
+                      : 'Tornerai al livello precedente'}
+                  </p>
+                </>
+              )}
+              <button
+                onClick={handleNextQuestion}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition flex items-center gap-2 mx-auto shadow-lg"
+              >
+                <span>Pronto per la prossima</span>
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Selezione Topic */}
-        {!question && !loading && (
+        {!question && !loading && !showResult && (
           <div className="bg-white rounded-xl shadow-lg p-8">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">
               Scegli un argomento
@@ -372,13 +465,6 @@ Non aggiungere testo prima o dopo il JSON.`;
               ))}
             </div>
 
-            {message && (
-              <div className={`mt-6 p-4 rounded-lg ${
-                message.includes('✅') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-                <p className="font-semibold text-center text-lg">{message}</p>
-              </div>
-            )}
           </div>
         )}
 
